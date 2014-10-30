@@ -48,13 +48,14 @@
 			uniform float height;
 			uniform float flash;
 			uniform float trackx;
+			uniform float temp;
 
 			void main( void ) {
 				vec2 uv = gl_FragCoord.xy / resolution.xy;	
 
 				float x_mid = .5;
 
-				float x_dist = abs(x_mid-uv.x);
+				float x_dist = abs(trackx-uv.x);//abs(x_mid-uv.x);
 
 				float y_mod = exp(-pow(x_dist,2.5)/1e-3) * .1;
 			        
@@ -72,10 +73,10 @@
 				float dist5 = distance(vec2(uv.x, gauss5), uv);
 				
 			    //rød
-			    col[0] += rgb[0] * (1.-dist) *8./12.;
+			    col[0] += temp * rgb[0] * (1.-dist) * 8./12.;
 			    
 			    //grønn
-			    //col[1] += rgb[1] * (1.-dist)*2./8.;
+			    //col[1] += temp * rgb[1] * (1.-dist) *8./12.;
 			    
 			    //blå
 			    col[2] += rgb[2] * (1.-dist) *2./8.;
@@ -103,11 +104,31 @@
 			var uniforms;
 
 			var flashvalues;
+			var temperatures;
+
+			var ws;
 
 			init();
 			animate();
 
 			function init() {
+
+				flashvalues = {def: 0.0, now: 0.0, future: 0.0};
+				temperatures = {def: 0.0, now: 0.0, future: 0.0};
+
+
+				var host = location.origin.replace(/^http/, 'ws');
+				ws = new WebSocket('ws://trappa.herokuapp.com');
+				ws.onmessage = function(event) {										
+					var data = JSON.parse(event.data);
+					flashvalues.future = data.move;
+					temperatures.future = (data.temp)/60.;
+					console.log(temperatures.future);
+					uniforms.trackx.value = data.dist/500.;
+					console.log(uniforms.trackx.value);
+					//console.log(temperatures.future);					
+				};
+
 
 				container = document.getElementById( 'container' );
 
@@ -125,10 +146,9 @@
 					height: { type: "f", value: 5.0},
 					rgb: { type: "v3", value: new THREE.Vector3(1, 0, 1) },
 					flash: { type: "f", value: 0.0 },
-					trackx: { type: "f", value:1.0}
+					trackx: { type: "f", value:0.0},
+					temp: {type:"f", value:1.0}
 				};
-
-				flashvalues = {def: 0.0, now: 0.0, future: 0.0};
 
 				var material = new THREE.ShaderMaterial( {
 
@@ -156,14 +176,14 @@
 			    		uniforms.speed.value -= 0.001;
 			    		break;		
 			        case 38:
-						uniforms.trackx.value += 20;
+						uniforms.trackx.value += 0.01;
 						console.log(uniforms.trackx.value);
 						break;
 			        case 40:
-			            uniforms.trackx.value -= 20;
+			            uniforms.trackx.value -= 0.01;
 			            console.log(uniforms.trackx.value);
 			            break;
-			        case 82:
+			        /*case 82:
 			        	var vars = uniforms.rgb.value;
 			        	if(vars.x === 1.0) {vars.setX(0.0);} else {vars.setX(1.0)};
 			        	break;
@@ -174,7 +194,7 @@
 			        case 66:
 			        	var vars = uniforms.rgb.value;
 			        	if(vars.z === 1.0) {vars.setZ(0.0);} else {vars.setZ(1.0)};
-			        	break;
+			        	break;*/
 			        case 13:
 			        	console.log(uniforms.flash);
 			        	flashvalues.future = 2.5;
@@ -189,36 +209,36 @@
 			}
 
 			function onWindowResize( event ) {
-
 				uniforms.resolution.value.x = window.innerWidth;
 				uniforms.resolution.value.y = window.innerHeight;
-
 				renderer.setSize( window.innerWidth, window.innerHeight );
-
 			}
-
-			//
 
 			function animate() {
-
 				requestAnimationFrame( animate );
-
 				render();
-
 			}
 
-			function render() {					
+
+			function calculateFlashvalues() {
 				mod = 50. ;
 				if(flashvalues.future < flashvalues.now) {
 					mod = 100. ;
 				}
-				flashvalues.now = uniforms.flash.value + (flashvalues.future - flashvalues.now)/mod;					
-				
+				flashvalues.now = uniforms.flash.value + (flashvalues.future - flashvalues.now)/mod;
 				if((flashvalues.now / flashvalues.future) > 0.9) flashvalues.future = flashvalues.def;
-
 				uniforms.flash.value = flashvalues.now;
+			}
+
+			function calculateColorTemp() {	
+				temperatures.now = uniforms.temp.value + (temperatures.future - temperatures.now);
+				uniforms.temp.value = temperatures.now;
+			}
+
+			function render() {
 				uniforms.time.value += uniforms.speed.value;
-				//console.log(uniforms.flash.value + " " + flashvalues.future)				
+				calculateFlashvalues();
+				calculateColorTemp();
 				renderer.render( scene, camera );
 			}
 
