@@ -49,13 +49,14 @@
 			uniform float flash;
 			uniform float trackx;
 			uniform float temp;
+			uniform float dist;
 
 			void main( void ) {
 				vec2 uv = gl_FragCoord.xy / resolution.xy;	
 
 				float x_mid = .5;
 
-				float x_dist = abs(trackx-uv.x);//abs(x_mid-uv.x);
+				float x_dist = abs(dist-uv.x);//abs(x_mid-uv.x);
 
 				float y_mod = exp(-pow(x_dist,2.5)/1e-3) * .1;
 			        
@@ -66,11 +67,11 @@
 			    float gauss5 = sin(uv.x*sin(time)*height+time)/10.+.3 + (flash*y_mod) * 2.0;
 			
 				vec4 col = vec4(vec3(0.0, 0.0, 0.0), 1.0);
-				float dist = distance(vec2(uv.x, gauss1), uv);
-				float dist2 = distance(vec2(uv.x, gauss2), uv);
-				float dist3 = distance(vec2(uv.x, gauss3), uv);
-				float dist4 = distance(vec2(uv.x, gauss4), uv);
-				float dist5 = distance(vec2(uv.x, gauss5), uv);
+				float dist  = 1.4 * distance(vec2(uv.x, gauss1), uv);
+				float dist2 = 1.2 * distance(vec2(uv.x, gauss2), uv);
+				float dist3 = 1.0 * distance(vec2(uv.x, gauss3), uv);
+				float dist4 = 0.8 * distance(vec2(uv.x, gauss4), uv);
+				float dist5 = 0.6 * distance(vec2(uv.x, gauss5), uv);
 				
 			    //rød
 			    col[0] += temp * rgb[0] * (1.-dist) * 8./12.;
@@ -82,11 +83,11 @@
 			    col[2] += rgb[2] * (1.-dist) *2./8.;
 			    
 			    //hvit
-				col += vec4(vec3(exp(-pow(dist,2.)/2e-5)), 0.5);
-				col += vec4(vec3(exp(-pow(dist2,2.)/2e-5)), 0.5);
-				col += vec4(vec3(exp(-pow(dist3,2.)/2e-5)), 0.5);
-				col += vec4(vec3(exp(-pow(dist4,2.)/2e-5)), 0.5);
-				col += vec4(vec3(exp(-pow(dist5,2.)/2e-5)), 0.5);
+				col += vec4(vec3(exp(-pow(dist,2.)/1e-5)), 0.5);
+				col += vec4(vec3(exp(-pow(dist2,2.)/1e-5)), 0.5);
+				col += vec4(vec3(exp(-pow(dist3,2.)/1e-5)), 0.5);
+				col += vec4(vec3(exp(-pow(dist4,2.)/1e-5)), 0.5);
+				col += vec4(vec3(exp(-pow(dist5,2.)/1e-5)), 0.5);
 			
 				gl_FragColor = col;
 			}
@@ -115,16 +116,17 @@
 
 				flashvalues = {def: 0.0, now: 0.0, future: 0.0};
 				temperatures = {def: 0.0, now: 0.0, future: 0.0};
+				distance = {def: 0.0, now: 0.0, future: 0.0};
 
 
-				var host = location.origin.replace(/^http/, 'ws');
-				ws = new WebSocket('ws://trappa.herokuapp.com');
+				//var host = location.origin.replace(/^http/, 'ws');
+				ws = new WebSocket('ws://localhost:5000');
 				ws.onmessage = function(event) {										
 					var data = JSON.parse(event.data);
 					flashvalues.future = data.move;
-					temperatures.future = (data.temp)/60.;
+					temperatures.future = (data.temp-15)/(23-15);
 					console.log(temperatures.future);
-					uniforms.trackx.value = data.dist/500.;
+					distance.future = (data.dist-50)/(700-15);
 					console.log(uniforms.trackx.value);
 					//console.log(temperatures.future);					
 				};
@@ -147,7 +149,8 @@
 					rgb: { type: "v3", value: new THREE.Vector3(1, 0, 1) },
 					flash: { type: "f", value: 0.0 },
 					trackx: { type: "f", value:0.0},
-					temp: {type:"f", value:1.0}
+					temp: {type:"f", value:1.0},
+					dist: {type:"f", value:0.0}
 				};
 
 				var material = new THREE.ShaderMaterial( {
@@ -235,10 +238,16 @@
 				uniforms.temp.value = temperatures.now;
 			}
 
+			function calculateDist() {
+				distance.now = uniforms.dist.value + (distance.future - distance.now) * 0.01;
+				uniforms.dist.value = distance.now;
+			}
+
 			function render() {
 				uniforms.time.value += uniforms.speed.value;
 				calculateFlashvalues();
 				calculateColorTemp();
+				calculateDist();
 				renderer.render( scene, camera );
 			}
 
